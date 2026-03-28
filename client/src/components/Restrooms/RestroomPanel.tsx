@@ -1,33 +1,29 @@
 import React, { useState } from 'react';
 import RestroomFilter, { RestroomFilters } from './RestroomFilter';
 import RestroomDetailCard from './RestroomDetailCard';
-import { useRestrooms } from '../../hooks/useRestrooms';
 import { formatDistance } from '../../utils/formatting';
 import type { Restroom } from '../../types/restroom';
 
 interface RestroomPanelProps {
-  lat: number;
-  lng: number;
+  restrooms: Restroom[];
+  loading: boolean;
+  error: string | null;
+  filters: RestroomFilters;
+  onFiltersChange: (f: RestroomFilters) => void;
   selectedRestroom: Restroom | null;
   onSelect: (restroom: Restroom | null) => void;
 }
 
-export default function RestroomPanel({ lat, lng, selectedRestroom, onSelect }: RestroomPanelProps) {
+export default function RestroomPanel({
+  restrooms, loading, error, filters, onFiltersChange, selectedRestroom, onSelect,
+}: RestroomPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filtersVisible, setFiltersVisible] = useState(false);
-  const [filters, setFilters] = useState<RestroomFilters>({
-    openNow: false,
-    accessibleOnly: false,
-    radiusMetres: 500,
-  });
-
-  const { restrooms, loading, error } = useRestrooms({ lat, lng, ...filters });
 
   const activeFilterCount = [filters.openNow, filters.accessibleOnly].filter(Boolean).length;
 
   return (
     <>
-      {/* ── Mobile FAB toggle ── */}
       <button
         onClick={() => { setIsOpen((o) => !o); onSelect(null); }}
         className="md:hidden fixed bottom-6 right-4 z-30 w-14 h-14 rounded-full bg-purple-600 text-white shadow-lg flex items-center justify-center"
@@ -41,53 +37,38 @@ export default function RestroomPanel({ lat, lng, selectedRestroom, onSelect }: 
         )}
       </button>
 
-      {/* ── Mobile bottom sheet ── */}
       <div
         className={`md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 ${
           isOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{ maxHeight: '70vh' }}
       >
-        {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-gray-200" />
         </div>
         <div className="overflow-y-auto" style={{ maxHeight: 'calc(70vh - 2rem)' }}>
           <PanelContent
-            restrooms={restrooms}
-            loading={loading}
-            error={error}
-            filters={filters}
-            filtersVisible={filtersVisible}
-            activeFilterCount={activeFilterCount}
-            selectedRestroom={selectedRestroom}
+            restrooms={restrooms} loading={loading} error={error}
+            filters={filters} filtersVisible={filtersVisible}
+            activeFilterCount={activeFilterCount} selectedRestroom={selectedRestroom}
             onFiltersToggle={() => setFiltersVisible((v) => !v)}
-            onFiltersChange={setFilters}
-            onSelect={onSelect}
+            onFiltersChange={onFiltersChange} onSelect={onSelect}
           />
         </div>
       </div>
 
-      {/* ── Desktop sidebar ── */}
       <div className="hidden md:flex fixed right-0 top-0 bottom-0 z-20 w-80 bg-white shadow-xl flex-col border-l border-gray-100">
         <PanelContent
-          restrooms={restrooms}
-          loading={loading}
-          error={error}
-          filters={filters}
-          filtersVisible={filtersVisible}
-          activeFilterCount={activeFilterCount}
-          selectedRestroom={selectedRestroom}
+          restrooms={restrooms} loading={loading} error={error}
+          filters={filters} filtersVisible={filtersVisible}
+          activeFilterCount={activeFilterCount} selectedRestroom={selectedRestroom}
           onFiltersToggle={() => setFiltersVisible((v) => !v)}
-          onFiltersChange={setFilters}
-          onSelect={onSelect}
+          onFiltersChange={onFiltersChange} onSelect={onSelect}
         />
       </div>
     </>
   );
 }
-
-// ── Shared panel body ────────────────────────────────────────────
 
 interface PanelContentProps {
   restrooms: Restroom[];
@@ -116,7 +97,6 @@ function PanelContent({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
         <div>
           <h2 className="font-semibold text-sm">Nearby Restrooms</h2>
@@ -144,14 +124,12 @@ function PanelContent({
         </button>
       </div>
 
-      {/* Filters (collapsible) */}
       {filtersVisible && (
         <div className="px-4 pb-3 border-b border-gray-100 shrink-0">
           <RestroomFilter filters={filters} onChange={onFiltersChange} />
         </div>
       )}
 
-      {/* List body */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {loading && <LoadingSkeleton />}
         {error && <ErrorState message={error} />}
@@ -167,8 +145,6 @@ function PanelContent({
     </div>
   );
 }
-
-// ── List item ────────────────────────────────────────────────────
 
 function RestroomListItem({ restroom: r, onSelect }: { restroom: Restroom; onSelect: (r: Restroom) => void }) {
   const openLabel =
@@ -200,8 +176,6 @@ function RestroomListItem({ restroom: r, onSelect }: { restroom: Restroom; onSel
     </li>
   );
 }
-
-// ── States ───────────────────────────────────────────────────────
 
 function LoadingSkeleton() {
   return (
@@ -236,8 +210,6 @@ function EmptyState() {
     </div>
   );
 }
-
-// ── Icons ────────────────────────────────────────────────────────
 
 function ToiletIcon({ className = 'w-6 h-6' }: { className?: string }) {
   return (

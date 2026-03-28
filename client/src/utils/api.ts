@@ -21,13 +21,11 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export async function fetchRestrooms(params: {
   lat: number; lng: number; radius: number; openNow: boolean; accessible: boolean;
 }) {
-  // 1. Try backend
   try {
     const data: any = await get('/api/restrooms', params);
     return data.restrooms ?? [];
   } catch { /* backend not running */ }
 
-  // 2. Try OSM directly with a 6s timeout
   try {
     const { fetchRestroomsFromOSM } = await import('./osm');
     const result = await Promise.race([
@@ -39,7 +37,6 @@ export async function fetchRestrooms(params: {
     return result;
   } catch { /* OSM unavailable or slow */ }
 
-  // 3. Fallback: hardcoded mock data so the UI always shows something
   const { getMockRestrooms } = await import('./mockRestrooms');
   return getMockRestrooms(params.lat, params.lng, params.radius);
 }
@@ -48,14 +45,14 @@ export function fetchHeatmap(params: { lat: number; lng: number; radius: number;
   return get<any>('/api/crowd/heatmap', params);
 }
 
-export function fetchDayRoute(origin: { lat: number; lng: number }, destination: { lat: number; lng: number }) {
-  return post<any>('/api/route/day', { origin, destination });
+export function fetchSafety(params: { lat: number; lng: number; radius: number }) {
+  return get<any>('/api/safety', params);
 }
 
-export function fetchNightRoute(
+export function fetchRoute(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
-  departureTime: string
+  mode: 'day' | 'night',
 ) {
-  return post<any>('/api/route/night', { origin, destination, departureTime });
+  return post<any>(`/api/route/${mode}`, { origin, destination });
 }
