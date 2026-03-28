@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import mapboxgl from 'mapbox-gl';
+import { useEffect, useRef } from 'react';
 
 interface Restroom {
   id: string;
@@ -12,28 +11,48 @@ interface Restroom {
 }
 
 interface RestroomPinsProps {
-  map: mapboxgl.Map;
+  map: google.maps.Map;
   restrooms: Restroom[];
 }
 
 export default function RestroomPins({ map, restrooms }: RestroomPinsProps) {
+  const markersRef = useRef<google.maps.Marker[]>([]);
+
   useEffect(() => {
-    const markers: mapboxgl.Marker[] = restrooms.map((r) => {
-      const el = document.createElement('div');
-      el.className = 'restroom-pin';
-      el.style.cssText = 'width:24px;height:24px;background:#7c3aed;border-radius:50%;border:2px solid white;cursor:pointer;';
+    markersRef.current.forEach((m) => m.setMap(null));
+    markersRef.current = [];
 
-      const popup = new mapboxgl.Popup({ offset: 12 }).setHTML(
-        `<strong>${r.name}</strong><br/>${r.hours}<br/>${r.accessible ? 'Accessible' : ''}`
-      );
+    markersRef.current = restrooms.map((r) => {
+      const marker = new google.maps.Marker({
+        position: { lat: r.lat, lng: r.lng },
+        map,
+        title: r.name,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#7c3aed',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        },
+      });
 
-      return new mapboxgl.Marker(el)
-        .setLngLat([r.lng, r.lat])
-        .setPopup(popup)
-        .addTo(map);
+      const infoWindow = new google.maps.InfoWindow({
+        content: `<div style="font-size:13px">
+          <strong>${r.name}</strong><br/>
+          ${r.hours}<br/>
+          ${r.accessible ? '<span style="color:#7c3aed">Accessible</span>' : ''}
+        </div>`,
+      });
+
+      marker.addListener('click', () => infoWindow.open(map, marker));
+      return marker;
     });
 
-    return () => markers.forEach((m) => m.remove());
+    return () => {
+      markersRef.current.forEach((m) => m.setMap(null));
+      markersRef.current = [];
+    };
   }, [map, restrooms]);
 
   return null;

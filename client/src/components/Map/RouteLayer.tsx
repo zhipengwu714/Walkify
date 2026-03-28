@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import mapboxgl from 'mapbox-gl';
+import { useEffect, useRef } from 'react';
+import { safetyScoreColor } from '../../utils/scoring';
 
 interface RouteSegment {
   from: { lat: number; lng: number };
@@ -8,52 +8,38 @@ interface RouteSegment {
 }
 
 interface RouteLayerProps {
-  map: mapboxgl.Map;
+  map: google.maps.Map;
   segments: RouteSegment[];
   mode: 'day' | 'night';
 }
 
 export default function RouteLayer({ map, segments, mode }: RouteLayerProps) {
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
+
   useEffect(() => {
-    const SOURCE_ID = 'route';
-    const LAYER_ID = 'route-line';
+    polylinesRef.current.forEach((p) => p.setMap(null));
+    polylinesRef.current = [];
 
-    const geojson: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: segments.map((seg) => ({
-        type: 'Feature',
-        properties: { safetyScore: seg.safetyScore ?? 1 },
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [seg.from.lng, seg.from.lat],
-            [seg.to.lng, seg.to.lat],
-          ],
-        },
-      })),
-    };
+    polylinesRef.current = segments.map((seg) => {
+      const color = mode === 'night'
+        ? safetyScoreColor(seg.safetyScore ?? 1)
+        : '#3b82f6';
 
-    if (map.getSource(SOURCE_ID)) {
-      (map.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource).setData(geojson);
-      return;
-    }
-
-    map.addSource(SOURCE_ID, { type: 'geojson', data: geojson });
-    map.addLayer({
-      id: LAYER_ID,
-      type: 'line',
-      source: SOURCE_ID,
-      paint: {
-        'line-color': mode === 'night'
-          ? ['interpolate', ['linear'], ['get', 'safetyScore'], 0, '#ef4444', 1, '#22c55e']
-          : '#3b82f6',
-        'line-width': 4,
-      },
+      return new google.maps.Polyline({
+        path: [
+          { lat: seg.from.lat, lng: seg.from.lng },
+          { lat: seg.to.lat, lng: seg.to.lng },
+        ],
+        strokeColor: color,
+        strokeWeight: 5,
+        strokeOpacity: 0.85,
+        map,
+      });
     });
 
     return () => {
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      polylinesRef.current.forEach((p) => p.setMap(null));
+      polylinesRef.current = [];
     };
   }, [map, segments, mode]);
 

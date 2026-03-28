@@ -1,38 +1,38 @@
-import { useEffect } from 'react';
-import mapboxgl from 'mapbox-gl';
+import { useEffect, useRef } from 'react';
 
-interface HeatmapLayerProps {
-  map: mapboxgl.Map;
+interface HeatmapPoint {
+  lat: number;
+  lng: number;
+  density: number;
 }
 
-// Adds/removes the crowd density heatmap layer on the provided map instance.
-export default function HeatmapLayer({ map }: HeatmapLayerProps) {
+interface HeatmapLayerProps {
+  map: google.maps.Map;
+  points: HeatmapPoint[];
+}
+
+export default function HeatmapLayer({ map, points }: HeatmapLayerProps) {
+  const layerRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
+
   useEffect(() => {
-    const SOURCE_ID = 'crowd-density';
-    const LAYER_ID = 'crowd-heatmap';
+    const data = points.map((p) =>
+      new google.maps.visualization.WeightedLocation({
+        location: new google.maps.LatLng(p.lat, p.lng),
+        weight: p.density,
+      })
+    );
 
-    map.addSource(SOURCE_ID, {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-    });
-
-    map.addLayer({
-      id: LAYER_ID,
-      type: 'heatmap',
-      source: SOURCE_ID,
-      paint: {
-        'heatmap-weight': ['get', 'density'],
-        'heatmap-intensity': 1,
-        'heatmap-radius': 30,
-        'heatmap-opacity': 0.7,
-      },
-    });
+    if (layerRef.current) {
+      layerRef.current.setData(data);
+    } else {
+      layerRef.current = new google.maps.visualization.HeatmapLayer({ data, map });
+    }
 
     return () => {
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      layerRef.current?.setMap(null);
+      layerRef.current = null;
     };
-  }, [map]);
+  }, [map, points]);
 
   return null;
 }
