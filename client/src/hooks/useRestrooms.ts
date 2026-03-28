@@ -1,16 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchRestrooms } from '../utils/api';
-
-interface Restroom {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  distanceMetres: number;
-  accessible: boolean;
-  openNow: boolean;
-  hours: string;
-}
+import type { Restroom } from '../types/restroom';
 
 interface UseRestroomsParams {
   lat: number;
@@ -23,14 +13,31 @@ interface UseRestroomsParams {
 export function useRestrooms({ lat, lng, radiusMetres, openNow, accessibleOnly }: UseRestroomsParams) {
   const [restrooms, setRestrooms] = useState<Restroom[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    if (!lat || !lng) return;
+
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     setLoading(true);
+    setError(null);
+
     fetchRestrooms({ lat, lng, radius: radiusMetres, openNow, accessible: accessibleOnly })
-      .then(setRestrooms)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .then((data) => {
+        setRestrooms(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setError('Failed to load restrooms. Check your connection.');
+        setLoading(false);
+      });
+
+    return () => abortRef.current?.abort();
   }, [lat, lng, radiusMetres, openNow, accessibleOnly]);
 
-  return { restrooms, loading };
+  return { restrooms, loading, error };
 }
