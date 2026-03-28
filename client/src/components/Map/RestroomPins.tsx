@@ -1,59 +1,65 @@
 import { useEffect, useRef } from 'react';
-
-interface Restroom {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  accessible: boolean;
-  openNow: boolean;
-  hours: string;
-}
+import type { Restroom } from '../../types/restroom';
 
 interface RestroomPinsProps {
   map: google.maps.Map;
   restrooms: Restroom[];
+  selectedId: string | null;
+  onSelect: (restroom: Restroom) => void;
 }
 
-export default function RestroomPins({ map, restrooms }: RestroomPinsProps) {
-  const markersRef = useRef<google.maps.Marker[]>([]);
+export default function RestroomPins({ map, restrooms, selectedId, onSelect }: RestroomPinsProps) {
+  const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
 
   useEffect(() => {
+    // Clear old markers
     markersRef.current.forEach((m) => m.setMap(null));
-    markersRef.current = [];
+    markersRef.current.clear();
+    infoWindowRef.current?.close();
 
-    markersRef.current = restrooms.map((r) => {
+    restrooms.forEach((r) => {
+      const isSelected = r.id === selectedId;
       const marker = new google.maps.Marker({
         position: { lat: r.lat, lng: r.lng },
         map,
         title: r.name,
+        zIndex: isSelected ? 10 : 1,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: '#7c3aed',
+          scale: isSelected ? 11 : 8,
+          fillColor: isSelected ? '#6d28d9' : '#7c3aed',
           fillOpacity: 1,
           strokeColor: '#ffffff',
-          strokeWeight: 2,
+          strokeWeight: isSelected ? 3 : 2,
         },
       });
 
-      const infoWindow = new google.maps.InfoWindow({
-        content: `<div style="font-size:13px">
-          <strong>${r.name}</strong><br/>
-          ${r.hours}<br/>
-          ${r.accessible ? '<span style="color:#7c3aed">Accessible</span>' : ''}
-        </div>`,
-      });
-
-      marker.addListener('click', () => infoWindow.open(map, marker));
-      return marker;
+      marker.addListener('click', () => onSelect(r));
+      markersRef.current.set(r.id, marker);
     });
 
     return () => {
       markersRef.current.forEach((m) => m.setMap(null));
-      markersRef.current = [];
+      markersRef.current.clear();
     };
   }, [map, restrooms]);
+
+  // Update icon when selection changes without re-creating all markers
+  useEffect(() => {
+    markersRef.current.forEach((marker, id) => {
+      const isSelected = id === selectedId;
+      marker.setZIndex(isSelected ? 10 : 1);
+      marker.setIcon({
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: isSelected ? 11 : 8,
+        fillColor: isSelected ? '#6d28d9' : '#7c3aed',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: isSelected ? 3 : 2,
+      });
+    });
+  }, [selectedId]);
 
   return null;
 }

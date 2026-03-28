@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-function dedup(restrooms) {
+function dedup(restrooms) {type
   const seen = new Set();
   return restrooms.filter((r) => {
     if (seen.has(r.id)) return false;
