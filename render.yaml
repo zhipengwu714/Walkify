@@ -4,7 +4,4 @@ services:
     runtime: docker
     dockerfilePath: ./server/Dockerfile
     dockerContext: ./server
-    envVars:
-      - key: PORT
-        value: "3001"
     healthCheckPath: /api/health

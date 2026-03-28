@@ -7,7 +7,7 @@ import routeRouter from './routes/route.js';
 import safetyRouter from './routes/safety.js';
 
 const app = express();
-const PORT = process.env.PORT ?? 3001;
+const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
