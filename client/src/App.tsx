@@ -1,16 +1,19 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Loader } from '@googlemaps/js-api-loader';
 import ModeToggle from './components/Controls/ModeToggle';
 import RouteInput from './components/Controls/RouteInput';
 import TimeSlider from './components/Controls/TimeSlider';
 import HeatmapLayer from './components/Map/HeatmapLayer';
 import RestroomPins from './components/Map/RestroomPins';
+import RouteLayer from './components/Map/RouteLayer';
 import RestroomPanel from './components/Restrooms/RestroomPanel';
 import { useMapMode } from './hooks/useMapMode';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useRestrooms } from './hooks/useRestrooms';
 import { useHeatmap } from './hooks/useHeatmap';
 import type { Restroom } from './types/restroom';
+import type { RestroomFilters } from './components/Restrooms/RestroomFilter';
+import type { RouteSegment } from './types/route';
 
 const NYC_CENTER = { lat: 40.7484, lng: -73.9857 };
 
@@ -28,21 +31,48 @@ export default function App() {
   const [mapsReady, setMapsReady] = useState(false);
   const [selectedRestroom, setSelectedRestroom] = useState<Restroom | null>(null);
   const [hour, setHour] = useState(new Date().getHours());
+  const [mapCenter, setMapCenter] = useState(NYC_CENTER);
+  const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
 
-  const center = position ?? NYC_CENTER;
-
-  const { restrooms } = useRestrooms({
-    lat: center.lat,
-    lng: center.lng,
-    radiusMetres: 500,
+  const [filters, setFilters] = useState<RestroomFilters>({
     openNow: false,
     accessibleOnly: false,
+    radiusMetres: 500,
+  });
+
+  const center = position ?? mapCenter;
+
+  // Single restroom fetch — drives both map pins and panel list
+  const { restrooms, loading, error } = useRestrooms({
+    lat: center.lat,
+    lng: center.lng,
+    radiusMetres: filters.radiusMetres,
+    openNow: filters.openNow,
+    accessibleOnly: filters.accessibleOnly,
   });
 
   const { points: heatmapPoints } = useHeatmap({
+    lat: center.lat,
+    lng: center.lng,
+    radius: filters.radiusMetres > 1000 ? filters.radiusMetres : 1500,
     hour,
-    enabled: mode === 'day',
+    mode,
+    enabled: true,
   });
+
+  const handleMapIdle = useCallback(() => {
+    if (!map.current) return;
+    const c = map.current.getCenter();
+    if (!c) return;
+    const newLat = c.lat();
+    const newLng = c.lng();
+    setMapCenter((prev) => {
+      // Only update if moved meaningfully (avoid infinite re-render)
+      const dist = Math.abs(prev.lat - newLat) + Math.abs(prev.lng - newLng);
+      if (dist < 0.002) return prev;
+      return { lat: newLat, lng: newLng };
+    });
+  }, []);
 
   useEffect(() => {
     loader.load().then(() => {
@@ -54,6 +84,7 @@ export default function App() {
         disableDefaultUI: false,
       });
       setMapsReady(true);
+      map.current.addListener('idle', handleMapIdle);
     });
   }, []);
 
@@ -78,26 +109,31 @@ export default function App() {
 
       {mapsReady && map.current && (
         <>
-          {mode === 'day' && <HeatmapLayer map={map.current} points={heatmapPoints} />}
+          <HeatmapLayer map={map.current} points={heatmapPoints} />
           <RestroomPins
             map={map.current}
             restrooms={restrooms}
             selectedId={selectedRestroom?.id ?? null}
             onSelect={setSelectedRestroom}
           />
+          {routeSegments.length > 0 && (
+            <RouteLayer map={map.current} segments={routeSegments} mode={mode} />
+          )}
         </>
       )}
 
-      {/* Controls */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
         <ModeToggle mode={mode} onToggle={toggleMode} />
-        <RouteInput />
+        <RouteInput mode={mode} onRouteCalculated={setRouteSegments} />
         {mode === 'day' && <TimeSlider hour={hour} onChange={setHour} />}
       </div>
 
       <RestroomPanel
-        lat={center.lat}
-        lng={center.lng}
+        restrooms={restrooms}
+        loading={loading}
+        error={error}
+        filters={filters}
+        onFiltersChange={setFilters}
         selectedRestroom={selectedRestroom}
         onSelect={setSelectedRestroom}
       />

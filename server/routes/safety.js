@@ -28,27 +28,52 @@ router.get('/', (req, res) => {
     `).all(numLat, numLng, numRadius);
 
     const totalIncidents = rows.reduce((sum, r) => sum + r.incident_count, 0);
-
     const dayIncidents = rows
       .filter((r) => r.time_of_day === 'day')
       .reduce((sum, r) => sum + r.incident_count, 0);
-
     const nightIncidents = rows
       .filter((r) => r.time_of_day === 'night')
       .reduce((sum, r) => sum + r.incident_count, 0);
 
-    // Score 0-100 (higher = safer). Night incidents weighted 1.5x.
-    const dayScore = Math.max(0, 100 - dayIncidents);
-    const nightScore = Math.max(0, 100 - nightIncidents * 1.5);
+    // Composite scoring per docs/scoring.md
+    // incident_score = 1 - clamp(incidents_per_100m / 5, 0, 1)
+    const radiusIn100m = numRadius / 100;
+    const dayIncidentScore = 1 - Math.min(1, (dayIncidents / Math.max(radiusIn100m, 1)) / 5);
+    const nightIncidentScore = 1 - Math.min(1, (nightIncidents / Math.max(radiusIn100m, 1)) / 5);
+
+    // Foot traffic from pedestrian counts
+    const pedRow = db.prepare(`
+      SELECT AVG(count_pm) as avg_traffic FROM pedestrian_counts
+      WHERE haversine(lat, lng, ?, ?) <= ?
+    `).get(numLat, numLng, numRadius);
+
+    const avgTraffic = pedRow?.avg_traffic || 0;
+    const density = Math.min(1, avgTraffic / 1500);
+
+    // traffic_score = min(density, 0.6) / 0.6
+    const trafficScore = Math.min(density, 0.6) / 0.6;
+
+    // lighting_score: approximate from foot traffic (high traffic areas tend to be lit)
+    const lightingScore = density > 0.3 ? 1.0 : 0.2;
+
+    // Composite: (incident * 0.5) + (lighting * 0.3) + (traffic * 0.2)
+    const dayScore = (dayIncidentScore * 0.5) + (lightingScore * 0.3) + (trafficScore * 0.2);
+    const nightScore = (nightIncidentScore * 0.5) + (lightingScore * 0.3) + (trafficScore * 0.2);
 
     res.json({
       lat: numLat,
       lng: numLng,
       radius: numRadius,
       safetyScore: {
-        day: Math.round(dayScore),
-        night: Math.round(nightScore),
-        overall: Math.round((dayScore + nightScore) / 2),
+        day: Math.round(dayScore * 100),
+        night: Math.round(nightScore * 100),
+        overall: Math.round(((dayScore + nightScore) / 2) * 100),
+      },
+      components: {
+        dayIncidentScore: +dayIncidentScore.toFixed(3),
+        nightIncidentScore: +nightIncidentScore.toFixed(3),
+        lightingScore: +lightingScore.toFixed(3),
+        trafficScore: +trafficScore.toFixed(3),
       },
       totalIncidents,
       breakdown: rows,

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS safety_data (
 );
 
 CREATE INDEX IF NOT EXISTS idx_safety_lat_lng ON safety_data (lat, lng);
+CREATE INDEX IF NOT EXISTS idx_safety_time ON safety_data (time_of_day);
 
 -- Street segment safety scores (computed from incident + lighting data)
 CREATE TABLE IF NOT EXISTS segment_scores (
