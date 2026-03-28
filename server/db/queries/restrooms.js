@@ -1,35 +1,33 @@
-import { pool } from '../index.js';
+import { db } from '../index.js';
 
-export async function findRestroomsNear({ lat, lng, radiusMetres, accessible, openNow }) {
+export function findRestroomsNear({ lat, lng, radiusMetres, accessible }) {
   let query = `
     SELECT
-      id, name, source, accessible, hours, last_verified,
-      ST_Distance(location, ST_MakePoint($2, $1)::geography) AS distance_metres
+      id, name, source, lat, lng, accessible, open_now, hours, last_verified,
+      haversine(lat, lng, ?, ?) AS distance_metres
     FROM restrooms
-    WHERE ST_DWithin(location, ST_MakePoint($2, $1)::geography, $3)
+    WHERE haversine(lat, lng, ?, ?) <= ?
   `;
-  const params = [lat, lng, radiusMetres];
+  const params = [lat, lng, lat, lng, radiusMetres];
 
   if (accessible) {
-    query += ` AND accessible = TRUE`;
+    query += ' AND accessible = 1';
   }
 
-  query += ` ORDER BY distance_metres ASC LIMIT 50`;
+  query += ' ORDER BY distance_metres ASC LIMIT 50';
 
-  const { rows } = await pool.query(query, params);
-  return rows;
+  return db.prepare(query).all(...params);
 }
 
-export async function upsertRestroom(restroom) {
+export function upsertRestroom(restroom) {
   const { id, name, source, lat, lng, accessible, hours, lastVerified } = restroom;
-  await pool.query(
-    `INSERT INTO restrooms (id, name, source, location, accessible, hours, last_verified)
-     VALUES ($1, $2, $3, ST_MakePoint($5, $4)::geography, $6, $7, $8)
+  db.prepare(
+    `INSERT INTO restrooms (id, name, source, lat, lng, accessible, hours, last_verified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET
-       name = EXCLUDED.name,
-       accessible = EXCLUDED.accessible,
-       hours = EXCLUDED.hours,
-       last_verified = EXCLUDED.last_verified`,
-    [id, name, source, lat, lng, accessible, hours, lastVerified]
-  );
+       name = excluded.name,
+       accessible = excluded.accessible,
+       hours = excluded.hours,
+       last_verified = excluded.last_verified`
+  ).run(id, name, source, lat, lng, accessible ? 1 : 0, hours, lastVerified);
 }

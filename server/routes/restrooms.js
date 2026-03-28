@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import { queryRestrooms } from '../services/osm.js';
-import { queryNycRestrooms } from '../services/nycOpenData.js';
+import { findRestroomsNear } from '../db/queries/restrooms.js';
 
 const router = Router();
 
 // GET /api/restrooms?lat=&lng=&radius=&accessible=&openNow=
-router.get('/', async (req, res) => {
+router.get('/', (req, res) => {
   const { lat, lng, radius = 500, accessible, openNow } = req.query;
 
   if (!lat || !lng) {
@@ -13,15 +12,29 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    const [osmResults, nycResults] = await Promise.all([
-      queryRestrooms({ lat: Number(lat), lng: Number(lng), radius: Number(radius) }),
-      queryNycRestrooms({ lat: Number(lat), lng: Number(lng), radius: Number(radius) }),
-    ]);
+    let rows = findRestroomsNear({
+      lat: Number(lat),
+      lng: Number(lng),
+      radiusMetres: Number(radius),
+      accessible: accessible === 'true',
+    });
 
-    let restrooms = dedup([...osmResults, ...nycResults]);
+    // Map to frontend-expected shape
+    let restrooms = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      source: r.source,
+      lat: r.lat,
+      lng: r.lng,
+      distanceMetres: r.distance_metres,
+      accessible: !!r.accessible,
+      openNow: !!r.open_now,
+      hours: r.hours || 'Unknown',
+    }));
 
-    if (accessible === 'true') restrooms = restrooms.filter((r) => r.accessible);
-    if (openNow === 'true') restrooms = restrooms.filter((r) => r.openNow);
+    if (openNow === 'true') {
+      restrooms = restrooms.filter((r) => r.openNow);
+    }
 
     res.json({ restrooms });
   } catch (err) {
@@ -29,14 +42,5 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch restrooms' });
   }
 });
-
-function dedup(restrooms) {
-  const seen = new Set();
-  return restrooms.filter((r) => {
-    if (seen.has(r.id)) return false;
-    seen.add(r.id);
-    return true;
-  });
-}
 
 export default router;
